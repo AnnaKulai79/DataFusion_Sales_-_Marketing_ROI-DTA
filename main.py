@@ -2,11 +2,29 @@ import pandas as pd
 import seaborn as sns
 import numpy as np
 import matplotlib.pyplot as plt
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 import os
-import db_sql as db
+import sqlite3
 from dotenv import load_dotenv
 load_dotenv()
+from db_sql import (
+    get_postgres_engine,
+    init_sqlite_db,
+    load_orders_postgres,
+    load_orders_sqlite,
+    query_monthly_sales_by_category,
+    query_top3_customers,
+    load_marketing_csv,
+    clean_marketing_data,
+    aggregate_sales_monthly,
+    merge_sales_marketing,
+    compute_monthly_roi,
+    check_channel_completeness,
+    plot_sales_vs_spend,
+    build_top3_customers,
+    roi_quality_notes,
+    extra_presentation_tables
+)
 
 
 query_category = """
@@ -36,70 +54,71 @@ FROM orders_by_month
 GROUP BY month
 """
 
-query_top3 = '''
-WITH orders_by_rank AS(
-	SELECT customer_id, RANK() OVER(ORDER BY SUM(order_amount) DESC) AS rank_customer,
-		SUM(order_amount)
-	FROM orders
-	GROUP BY customer_id
-)
-
-SELECT *
-FROM orders_by_rank
-WHERE rank_customer<=3;
-'''
-
-
-csv_path = 'marketing_spend.csv'
-
-def load_marketing_csv(csv_path: str) -> pd.DataFrame:
-    df = pd.read_csv(csv_path)
-    df['month'] = pd.to_datetime(df['month'], errors='coerce')
-    return df
-
-def clean_marketing_data(df_raw: pd.DataFrame) -> pd.DataFrame:
-    df = df_raw.copy()
-    df['channel'] = df['channel'].astype(str).str.strip()
-    channel_map = {
-        "google ads": "Google Ads",
-        "google ad": "Google Ads",
-        "googleads": "Google Ads",
-        "instagram": "Instagram",
-        "tiktok": "TikTok",
-        "facebook": "Facebook",
-        "youtube": "YouTube"
-        }
-    df['channel_std'] = df['channel'].str.lower().map(channel_map).fillna(df['channel'].str.title())
-    
-    def parse_spend(x):
-        if pd.isna(x):
-            return np.nan
-        x = str(x).strip().lower()
-        if x in ['', 'na', 'missing', 'null', 'none']:
-            return np.nan
-        try:
-            return float(x)
-        except:
-            return np.nan
-    df['spend_amount_num'] = df['spend_amount'].apply(parse_spend)
-    df['negativ_spend_flag'] = df['spend_amount_num'] < 0
-    df.loc[df['negativ_spend_flag'], 'spend_amount_num'] = np.nan
-    clean = df[['month', 'channel_std', 'spend_amount_num', 'negativ_spend_flag']].rename(columns={'channel_std': 'channel', 'spend_amount_num': 'spend_amount'})
-    clean['month'] = pd.to_datetime(clean['month']).dt.to_period('M').dt.to_timestamp()
-    return clean
-
+# для гарних графіків
+sns.set(style="whitegrid", font_scale=1.1)
+plt.rcParams["figure.figsize"] = (12, 6)
 
 
 def main():
-    csv_path = "marketing_spend.csv"
-    df = clean_marketing_data(load_marketing_csv(csv_path))
-    print(df)
-    
+    # 0) Налаштування шляхів
+    csv_path = "marketing_spend.csv"  # експортований CSV з Google Sheets
+    sqlite_path = "orders_sqlite.db"
     orders_sql_path = "orders.sql"
+    orders_sqlite_sql_path = "orders_sqlite.sql"  # якщо створюєте через SQLite
+
+    # 1) Варіант A: PostgreSQL (рекомендовано)
+    # Рядок підключення змінних оточення
     pg_url = os.getenv("POSTGRES_URL")
-    pg_engine = db.get_postgres_engine(pg_url)
-    orders = db.load_orders_postgres(pg_engine)
-    print(orders)
+    pg_engine = get_postgres_engine(pg_url)
+
+    # 2) Альтернатива B: SQLite (локально, без сервера)
+    # SQLite зручний для навчання та повторюваності
+    sqlite_conn = init_sqlite_db(sqlite_path, orders_sqlite_sql_path)
+
+    # 3) Завантаження orders з PostgreSQL або SQLite:
+    orders_pg = load_orders_postgres(pg_engine)
+    orders_sqlite = load_orders_sqlite(sqlite_conn)
+
+    # 4) SQL-запити: агрегати продажів та топ-3 клієнти
+    monthly_sales_cat_pg = query_monthly_sales_by_category(pg_engine)
+    top3_customers_pg = query_top3_customers(pg_engine)
+
+    # 5) Завантаження та чистка маркетингових даних
+    marketing_raw = load_marketing_csv(csv_path)
+    marketing_clean = clean_marketing_data(marketing_raw)
+
+    # 6) Агрегати продажів і об’єднання з маркетингом
+    monthly_sales = aggregate_sales_monthly(orders_pg)  # або orders_sqlite
+    sales_marketing = merge_sales_marketing(monthly_sales, marketing_clean)
+
+    # 7) ROI по місяцях
+    monthly_roi = compute_monthly_roi(sales_marketing)
+
+    # 8) Перевірка повноти по каналах
+    channel_check = check_channel_completeness(marketing_clean)
+
+    # 9) Графіки: Продажі vs Витрати
+    plot_sales_vs_spend(sales_marketing, marketing_clean)
+
+    # 10) Топ-3 клієнти за витратами
+    top3_customers = build_top3_customers(orders_pg)
+
+    # 11) ROI-таблиці та зауваження до якості даних
+    notes = roi_quality_notes(marketing_clean)
+
+    # 12) Додаткові корисні таблиці для презентації
+    tables = extra_presentation_tables(sales_marketing, marketing_clean)
+
+    # 13) Збережіть ключові результати у CSV/MD або виведіть у консоль
+    monthly_sales.to_csv("out_monthly_sales.csv", index=False)
+    sales_marketing.to_csv("out_sales_marketing.csv", index=False)
+    monthly_roi.to_csv("out_monthly_roi.csv", index=False)
+    top3_customers.to_csv("out_top3_customers.csv", index=False)
+    channel_check.to_csv("out_channel_check.csv", index=False)
+
+    print("Короткі зауваження до якості даних:")
+    for n in notes:
+        print("-", n)
 
 if __name__ == "__main__":
     main()

@@ -1,3 +1,4 @@
+DROP TABLE IF EXISTS orders;
 CREATE TABLE orders (
     order_id INTEGER PRIMARY KEY,
     customer_id INTEGER,
