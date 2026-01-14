@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 import sqlite3
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 
 def get_postgres_engine(pg_url: str):
     engine = create_engine(pg_url, echo=False, future=True)
@@ -168,73 +169,171 @@ def check_channel_completeness(marketing_clean: pd.DataFrame) -> pd.DataFrame:
     return pivot.reset_index()
 
 # Графік: Продажі vs Витрати
+# def plot_sales_vs_spend(sales_marketing: pd.DataFrame, marketing_clean: pd.DataFrame):
+# # 1. Підготовка даних для стеку (Pivot Table)
+#     pivot = marketing_clean.pivot_table(
+#         index="month", 
+#         columns="channel", 
+#         values="spend_amount", 
+#         aggfunc="sum"
+#     ).fillna(0)
+
+#     # Впорядковуємо канали для стабільності легенди
+#     cols = ["Facebook", "Google Ads", "Instagram", "TikTok", "YouTube"]
+#     for c in cols:
+#         if c not in pivot.columns:
+#             pivot[c] = 0.0
+#     pivot = pivot[cols].sort_index()
+
+#     # Створюємо рядки дат для осі X
+#     month_labels = pivot.index.strftime('%Y-%m')
+
+#     # 2. Побудова графіка
+#     fig, ax1 = plt.subplots(figsize=(14, 7))
+
+#     # Створюємо Stacked Area Chart на основній осі (ax1)
+#     # Ми використовуємо числа 0, 1, 2... для X, а потім замінимо їх на дати
+#     x_indices = np.arange(len(month_labels))
+    
+#     ax1.stackplot(
+#         x_indices,
+#         [pivot[c].values for c in cols],
+#         labels=cols,
+#         alpha=0.4,
+#         colors=plt.cm.Pastel1.colors # приємні кольори для стеку
+#     )
+    
+#     ax1.set_ylabel("Маркетингові витрати ($)")
+#     ax1.legend(loc="upper left", title="Канали витрат")
+
+#     # 3. Додаємо другу вісь для продажів (Line Chart)
+#     ax2 = ax1.twinx()
+    
+#     # Сортуємо продажі за часом, щоб лінія не "стрибала"
+#     sales_sorted = sales_marketing.sort_values("month")
+    
+#     ax2.plot(
+#         x_indices, 
+#         sales_sorted["sales_sum"], 
+#         color="black", 
+#         linewidth=3, 
+#         marker='o', 
+#         label="Загальні продажі"
+#     )
+    
+#     ax2.set_ylabel("Сума продажів ($)")
+#     ax2.legend(loc="upper right")
+
+#     # 4. Налаштування осей та лімітів
+#     max_val = max(sales_marketing["sales_sum"].max(), pivot.values.sum(axis=1).max())
+#     upper_limit = max_val * 1.15
+
+#     # ax1.set_ylim(0, upper_limit)
+#     # ax2.set_ylim(0, upper_limit)
+
+#     # Налаштування X-осі (Warning fix)
+#     ax1.set_xticks(x_indices)
+#     ax1.set_xticklabels(month_labels, rotation=45, ha='right')
+
+#     plt.title("Кореляція: Загальні продажі (лінія) vs Маркетингові витрати (стек)", fontsize=14)
+#     plt.tight_layout()
+#     plt.show()
+# def plot_sales_vs_spend(sales_marketing: pd.DataFrame, marketing_clean: pd.DataFrame):
+#     df_merged = pd.merge(marketing_clean, sales_marketing, on='month', how='left')
+#     df_plot = df_merged.copy().sort_values('month') 
+#     df_plot['month_str'] = df_plot['month'].dt.strftime('%Y-%m-%d')
+    
+#     max_val = max(sales_marketing["sales_sum"].max(), marketing_clean['spend_amount'].max())
+#     upper_limit = max_val * 1.15
+    
+#     fig, ax1 = plt.subplots(figsize=(14, 7))
+
+#     sns.barplot(data=df_plot, x='month_str', y='sales_sum', ax=ax1, color='skyblue', alpha=0.4, label='Total Sales', errorbar=None) 
+    
+#     ax2 = ax1.twinx() 
+#     sns.lineplot(data=df_plot, x='month_str', y='spend_amount', hue='channel', marker='o', ax=ax2)
+    
+#     # ax1.set_ylim(0, upper_limit) 
+#     # ax2.set_ylim(0, upper_limit)
+#     ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1))
+
+#     ax1.set_xticks(range(len(df_plot['month_str'].unique())))
+#     ax1.set_xticklabels(df_plot['month_str'].unique(), rotation=45, ha='right')
+ 
+#     plt.title('Sales vs Marketing Spend') 
+#     plt.tight_layout() 
+#     plt.show()
+# def plot_sales_vs_spend(sales_marketing: pd.DataFrame, marketing_clean: pd.DataFrame):
+#     # Лінія продажів
+#     fig, ax = plt.subplots()
+
+#     ax.plot(sales_marketing["month"], sales_marketing["sales_sum"], color="black", label="Продажі")
+#     ax.set_xlabel("Місяць")
+#     ax.set_ylabel("Сума продажів")
+#     ax.legend(loc="upper left")
+
+#     plt.title("Продажі (лінія) та маркетингові витрати по каналах (стек)")
+
+#     # Підготуємо стек витрат по каналах
+#     pivot = marketing_clean.pivot_table(
+#         index="month", columns="channel", values="spend_amount", aggfunc="sum"
+#     ).fillna(0)
+#     # Впорядкуємо канали
+#     cols = ["Facebook", "Google Ads", "Instagram", "TikTok", "YouTube"]
+#     for c in cols:
+#         if c not in pivot.columns:
+#             pivot[c] = 0.0
+#     pivot = pivot[cols].sort_index()
+
+#     # Друга вісь для витрат
+#     ax2 = ax.twinx()
+#     ax2.stackplot(
+#         pivot.index,
+#         [pivot[c].values for c in cols],
+#         labels=cols,
+#         alpha=0.4
+#     )
+#     ax2.set_ylabel("Маркетингові витрати")
+#     ax2.legend(loc="upper left")
+   
+#     ax.xaxis.set_major_locator(mdates.MonthLocator()) 
+#     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+   
+#     plt.tight_layout()
+#     plt.show()
+
 def plot_sales_vs_spend(sales_marketing: pd.DataFrame, marketing_clean: pd.DataFrame):
-    df_merged = pd.merge(marketing_clean, sales_marketing, on='month', how='left')
-    df_plot = df_merged.copy().sort_values('month') 
-    df_plot['month_str'] = df_plot['month'].dt.strftime('%Y-%m-%d')
+    df_sales = sales_marketing.groupby('month')['sales_sum'].sum().reset_index()
+    df_sales['month_str'] = df_sales['month'].dt.strftime('%Y-%m')
     
-    max_val = max(sales_marketing["sales_sum"].max(), marketing_clean['spend_amount'].max())
-    upper_limit = max_val * 1.15
-    
+    # Агрегуємо витрати по каналах
+    df_spend = marketing_clean.copy()
+    df_spend['month_str'] = df_spend['month'].dt.strftime('%Y-%m')
+
     fig, ax1 = plt.subplots(figsize=(14, 7))
 
-    sns.barplot(data=df_plot, x='month_str', y='sales_sum', ax=ax1, color='skyblue', alpha=0.4, label='Total Sales', errorbar=None) 
-    
-    ax2 = ax1.twinx() 
-    sns.lineplot(data=df_plot, x='month_str', y='spend_amount', hue='channel', marker='o', ax=ax2)
-    
-    ax1.set_ylim(0, upper_limit) 
-    ax2.set_ylim(0, upper_limit)
-    ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1))
+    # --- ПРАВА ОСЬ (Y1): Продажі ---
+    sns.barplot(data=df_sales, x='month_str', y='sales_sum', ax=ax1, 
+                color='skyblue', alpha=0.3, label='Total Sales')
+    ax1.set_ylabel('Сума продажів ($)', color='blue', fontsize=12)
+    ax1.tick_params(axis='y', labelcolor='blue')
 
-    ax1.set_xticks(range(len(df_plot['month_str'].unique())))
-    ax1.set_xticklabels(df_plot['month_str'].unique(), rotation=45, ha='right')
- 
-    plt.title('Sales vs Marketing Spend') 
-    plt.tight_layout() 
+    # --- ЛІВА ОСЬ (Y2): Витрати ---
+    ax2 = ax1.twinx() # Створюємо незалежну шкалу Y
+    sns.lineplot(data=df_spend, x='month_str', y='spend_amount', hue='channel', 
+                 marker='o', linewidth=2, ax=ax2)
+    ax2.set_ylabel('Витрати на канали ($)', color='red', fontsize=12)
+    ax2.tick_params(axis='y', labelcolor='red')
+
+    # Вирівнювання осі X (щоб місяці не "з'їжджали")
+    ax1.set_xticks(range(len(df_sales)))
+    ax1.set_xticklabels(df_sales['month_str'], rotation=45)
+
+    plt.title('Sales (Bar) vs Marketing Spend (Lines) with Dual Scales')
+    ax2.legend(loc='upper left', bbox_to_anchor=(1.05, 1), title='Channels')
+    
+    plt.tight_layout()
     plt.show()
-
-    # Лінія продажів
-    # fig, ax = plt.subplots()
-
-    # ax.plot(sales_marketing["month"], sales_marketing["sales_sum"], color="black", label="Продажі")
-    # ax.set_xlabel("Місяць")
-    # ax.set_ylabel("Сума продажів")
-    # ax.legend(loc="upper left")
-
-    # plt.title("Продажі (лінія) та маркетингові витрати по каналах (стек)")
-
-    # # Підготуємо стек витрат по каналах
-    # pivot = marketing_clean.pivot_table(
-    #     index="month", columns="channel", values="spend_amount", aggfunc="sum"
-    # ).fillna(0)
-    # # Впорядкуємо канали
-    # cols = ["Facebook", "Google Ads", "Instagram", "TikTok", "YouTube"]
-    # for c in cols:
-    #     if c not in pivot.columns:
-    #         pivot[c] = 0.0
-    # pivot = pivot[cols].sort_index()
-
-    # # Друга вісь для витрат
-    # ax2 = ax.twinx()
-    # ax2.stackplot(
-    #     pivot.index,
-    #     [pivot[c].values for c in cols],
-    #     labels=cols,
-    #     alpha=0.4
-    # )
-    # max_val = max(sales_marketing["sales_sum"].max(), marketing_clean['spend_amount'].max())
-
-    # upper_limit = max_val * 1.15
-    
-
-    # ax.set_ylim(0, upper_limit) 
-    # ax2.set_ylim(0, upper_limit)
-    
-    # ax2.set_ylabel("Маркетингові витрати")
-    # ax2.legend(loc="upper right")
-    # plt.tight_layout()
-    # plt.show()
 
 # Таблиці для презентації топ-3 клієнтів
 def build_top3_customers(orders_df: pd.DataFrame) -> pd.DataFrame:
